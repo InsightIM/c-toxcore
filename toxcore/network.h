@@ -388,6 +388,9 @@ void networking_registerhandler(Networking_Core *net, uint8_t byte, packet_handl
 /* Call this several times a second. */
 void networking_poll(Networking_Core *net, void *userdata);
 
+/* Call this several times a second. */
+bool networking_test(Networking_Core *net, IP_Port dstIpPort, int nWaitMilliseconds);
+
 /* Connect a socket to the address specified by the ip_port. */
 int net_connect(Socket sock, IP_Port ip_port);
 

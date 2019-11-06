@@ -31,7 +31,7 @@
 #include <stdint.h>
 
 #include "logger.h"
-
+#include "tox.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -65,6 +65,28 @@ uint64_t max_u64(uint64_t a, uint64_t b);
 uint16_t min_u16(uint16_t a, uint16_t b);
 uint32_t min_u32(uint32_t a, uint32_t b);
 uint64_t min_u64(uint64_t a, uint64_t b);
+
+uint64_t get_unixtime();
+
+int64_t local_msg_id();
+
+void nano_sleep(uint32_t milliseconds);
+
+int StringToHex(const char *str, unsigned char *out, unsigned int *outlen);
+
+/**
+* Test whether IP provides socks 5 services
+*
+* @param szHost [in] Specify IP address or host.
+* @param nPort [in] Specify port.
+* @param nWaitSeconds [in] set timeout second
+*
+* @return true on success, false on failure.
+*/
+int IsSocks5(char *szHost, int nPort, int nWaitSeconds);
+int TestNode(const char *szHost, int nPort, bool bTcp, const char *szPublicKey, int nWaitSeconds);
+char* GetUrl(char *szUrlAddress, int nMaxLen, time_t mkTime);
+
 
 #ifdef __cplusplus
 }  // extern "C"

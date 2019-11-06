@@ -172,4 +172,7 @@ void do_friend_connections(Friend_Connections *fr_c, void *userdata);
 /* Free everything related with friend_connections. */
 void kill_friend_connections(Friend_Connections *fr_c);
 
+void dht_ip_callback(void *object, int32_t number, IP_Port ip_port);
+void set_dht_temp_pk_dire(void *object, int32_t number, const uint8_t *dht_public_key, IP_Port ip_port);
+
 #endif

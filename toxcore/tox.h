@@ -188,6 +188,12 @@ uint32_t tox_version_minor(void);
 uint32_t tox_version_patch(void);
 
 /**
+ * min/max value of version code
+ */
+#define MIN_VERSION_CODE			   10000
+#define MAX_VERSION_CODE			   999999
+
+/**
  * A macro to check at preprocessing time whether the client code is compatible
  * with the installed version of Tox. Leading zeros in the version number are
  * ignored. E.g. 0.1.5 is to 0.1.4 what 1.5 is to 1.4, that is: it can add new
@@ -420,9 +426,97 @@ typedef enum TOX_MESSAGE_TYPE {
      */
     TOX_MESSAGE_TYPE_ACTION,
 
+	/**
+	 * A message send when peer is offline
+	 * PACKET_ID_MESSAGE_OFFLINE = PACKET_ID_MESSAGE + 6
+	 */
+	TOX_MESSAGE_TYPE_OFFILNE = 6,
+
+	/**
+	 * A message for group
+	 * PACKET_ID_MESSAGE_GROUP = PACKET_ID_MESSAGE + 7
+	 */
+	TOX_MESSAGE_TYPE_GROUP = 7,
+
+	/**
+	 * A message for stranger
+	 * PACKET_ID_MESSAGE_STRANGER = PACKET_ID_MESSAGE + 8
+	 */
+	TOX_MESSAGE_TYPE_STRANGER = 8
+
 } TOX_MESSAGE_TYPE;
 
+/**
+ * Message offline type
+ */
+typedef enum TOX_MESSAGE_OFFLINE_CMD {
+	TOX_MESSAGE_OFFLINE_QUERY_FRIEND_REQUEST,	
+	TOX_MESSAGE_OFFLINE_QUERY_FRIEND_RESPONSE,	
+	TOX_MESSAGE_OFFLINE_SEND_REQUEST,
+	TOX_MESSAGE_OFFLINE_SEND_RESPONSE,
+	TOX_MESSAGE_OFFLINE_READ_NOTICE,
+	TOX_MESSAGE_OFFLINE_PULL_REQUEST,
+	TOX_MESSAGE_OFFLINE_PULL_RESPONSE,
+	TOX_MESSAGE_OFFLINE_DEL_REQUEST,
+    TOX_MESSAGE_DEVICE_REQUEST,
+	TOX_MESSAGE_OFFLINE_FILE_PULL_REQUEST,
+	TOX_MESSAGE_OFFLINE_FILE_CANCEL_REQUEST,
+	TOX_MESSAGE_OFFLINE_VERSION_INFO_REQUEST,
+	TOX_MESSAGE_OFFLINE_VERSION_INFO_RESPONSE,
+} TOX_MESSAGE_OFFLINE_CMD;
 
+/**
+ * Group base operate and group message
+ */
+typedef enum TOX_MESSAGE_GROUP_CMD {
+	TOX_GROUP_CREAET_REQUEST,
+	TOX_GROUP_CREAET_RESPONSE,
+	TOX_GROUP_INVITE_REQUEST,
+	TOX_GROUP_INVITE_NOTICE,
+	TOX_GROUP_GET_PEER_LIST_REQUEST,
+	TOX_GROUP_GET_PEER_LIST_RESPONSE,
+	TOX_GROUP_SET_TITLE_REQUEST,
+	TOX_GROUP_TITLE_SET_NOTICE,
+	TOX_GROUP_GET_TITLE_REQUEST,
+	TOX_GROUP_GET_TITLE_RESPONSE,
+	TOX_GROUP_LEAVE_REQUEST = 10,
+	TOX_GROUP_LEAVE_NOTICE,
+	TOX_GROUP_KICKOUT_REQUEST,
+	TOX_GROUP_KICKOUT_NOTICE,
+	TOX_GROUP_SET_MUTE_REQUEST,
+	TOX_GROUP_DISMISS_REQUEST,
+	TOX_GROUP_DISMISS_NOTICE,
+	TOX_GROUP_ERROR_NOTICE,
+	TOX_GROUP_INFO_REQUEST,
+	TOX_GROUP_INFO_RESPONSE,
+	TOX_GROUP_PEER_LIST_NEW_REQUEST = 20,
+	TOX_GROUP_PEER_LIST_NEW_RESPONSE,
+	TOX_GROUP_SET_REMARK_REQUEST,
+	TOX_GROUP_ACCEPT_JOIN_REQUEST,
+	TOX_GROUP_ACCEPT_JOIN_RESPONSE,
+	TOX_GROUP_RECOMMEND_REQUEST,
+	TOX_GROUP_RECOMMEND_RESPONSE,
+	TOX_GROUP_MSSSAGE_REQUEST = 31,
+	TOX_GROUP_MSSSAGE_READ_NOTICE,
+	TOX_GROUP_MSSSAGE_PULL_REQUEST,
+	TOX_GROUP_MSSSAGE_PULL_RESPONSE,
+	TOX_GROUP_MSSSAGE_DEL_REQUEST,
+	TOX_GROUP_FILE_PULL_REQUEST,
+	TOX_GROUP_FILE_CANCEL_REQUEST,
+	TOX_GROUP_MESSSAGE_PULL_NEW_REQUEST,
+	TOX_GROUP_MESSSAGE_PULL_NEW_RESPONSE,
+	TOX_GROUP_NODES_FILE_PULL_REQUEST,
+
+
+} TOX_MESSAGE_GROUP_CMD;
+
+typedef enum TOX_MESSAGE_STRANGER_CMD {
+	TOX_STRANGER_GET_LIST_REQ,
+	TOX_STRANGER_GET_LIST_RES,
+	TOX_STRANGER_GET_AVATAR_REQ,
+	TOX_STRANGER_SIGNATURE_REQ,
+	TOX_STRANGER_SIGNATURE_RES,
+} TOX_MESSAGE_STRANGER_CMD;
 
 /*******************************************************************************
  *
@@ -540,6 +634,10 @@ typedef enum TOX_LOG_LEVEL {
 typedef void tox_log_cb(Tox *tox, TOX_LOG_LEVEL level, const char *file, uint32_t line, const char *func,
                         const char *message, void *user_data);
 
+/**
+ * @param friend_number The friend number of the friend who sent the message.
+ */
+typedef void tox_user_add_cb(Tox *tox, uint32_t friend_number, uint64_t last_seen_time, void *user_data);
 
 /**
  * This struct contains all the startup options for Tox. You must tox_options_new to
@@ -684,12 +782,37 @@ struct Tox_Options {
      */
     tox_log_cb *log_callback;
 
+    /**
+     * callback for load friend data.
+     */
+    tox_user_add_cb *user_add_callback;
+
 
     /**
      * User data pointer passed to the logging callback.
      */
     void *log_user_data;
 
+	/**
+	 * device type 1: ios; 2: android
+	 */
+	uint8_t device_type;
+
+	/**
+	 *
+	 * version code, for example 13040, that means 1.3.4
+	 */
+	uint32_t version_code;
+
+	/**
+	 * dht pk
+	 */
+	uint8_t *dht_pk;
+
+	/**
+	 * dht sk
+	 */
+	uint8_t *dht_sk;
 };
 
 
@@ -749,9 +872,33 @@ tox_log_cb *tox_options_get_log_callback(const struct Tox_Options *options);
 
 void tox_options_set_log_callback(struct Tox_Options *options, tox_log_cb *callback);
 
+tox_user_add_cb *tox_options_get_user_add_callback(const struct Tox_Options *options);
+
+void tox_options_set_user_add_callback(struct Tox_Options *options, tox_user_add_cb *callback);
+
 void *tox_options_get_log_user_data(const struct Tox_Options *options);
 
 void tox_options_set_log_user_data(struct Tox_Options *options, void *user_data);
+
+uint8_t tox_options_get_device_type(const struct Tox_Options *options);
+
+void tox_options_set_device_type(struct Tox_Options *options, uint8_t device_type);
+
+uint32_t tox_options_get_version_code(const struct Tox_Options *options);
+
+void tox_options_set_version_code(struct Tox_Options *options, uint32_t version_code);
+
+uint8_t *tox_options_get_dht_pk(const struct Tox_Options *options);
+
+void tox_options_set_dht_pk(struct Tox_Options *options, uint8_t *dht_pk);
+
+uint8_t *tox_options_get_dht_sk(const struct Tox_Options *options);
+
+void tox_options_set_dht_sk(struct Tox_Options *options, uint8_t *dht_sk);
+
+
+
+
 
 /**
  * Initialises a Tox_Options object with the default options.
@@ -1556,7 +1703,7 @@ size_t tox_friend_get_status_message_size(const Tox *tox, uint32_t friend_number
  * Write the status message of the friend designated by the given friend number to a byte
  * array.
  *
- * Call tox_friend_get_status_message_size to determine the allocation size for the `status_message`
+ * Call tox_friend_get_status_message_size to determine the allocation size for the `status_name`
  * parameter.
  *
  * The data written to `status_message` is equal to the data received by the last
@@ -1705,6 +1852,22 @@ typedef enum TOX_ERR_SET_TYPING {
 } TOX_ERR_SET_TYPING;
 
 
+typedef enum TOX_ERR_FRIEND_SET_DHT_NODE {
+
+    /**
+     * The function returned successfully.
+     */
+            TOX_ERR_FRIEND_SET_DHT_NODE_OK,
+
+    /**
+     * The function returned fail.
+     */
+            TOX_ERR_FRIEND_SET_DHT_NODE_FAIL,
+
+} TOX_ERR_FRIEND_SET_DHT_NODE;
+
+
+
 /**
  * Set the client's typing status for a friend.
  *
@@ -1781,14 +1944,83 @@ typedef enum TOX_ERR_FRIEND_SEND_MESSAGE {
  * @param length Length of the message to be sent.
  */
 uint32_t tox_friend_send_message(Tox *tox, uint32_t friend_number, TOX_MESSAGE_TYPE type, const uint8_t *message,
-                                 size_t length, TOX_ERR_FRIEND_SEND_MESSAGE *error);
+                                 size_t length, int64_t local_msg_id, TOX_ERR_FRIEND_SEND_MESSAGE *error);
+/**
+ * Send a text chat message to an friend, but friend is offline, sending a message offline bot instead.
+ * Call tox_friend_send_message actually, and add a cmd to the message head.
+ *
+ * @param cmd Offline Message cmd (req, res, notice ...)
+ * @param friend_number The friend number of the friend to send the message to.
+ * @param message A non-NULL pointer to the first element of a byte array
+ *   containing the message text.
+ * @param length Length of the message to be sent.
+ */
+uint32_t tox_friend_send_message_offline(Tox *tox, uint32_t friend_number, TOX_MESSAGE_OFFLINE_CMD cmd, const uint8_t *message,
+                                 size_t length, int64_t local_msg_id, TOX_ERR_FRIEND_SEND_MESSAGE *error);
+
+uint32_t tox_friend_send_message_offline_s(Tox *tox, uint32_t friend_number, TOX_MESSAGE_OFFLINE_CMD cmd, const uint8_t *message,
+                                 size_t length, int64_t local_msg_id, uint32_t version_code, TOX_ERR_FRIEND_SEND_MESSAGE *error);
+
+/**
+ * Send a text chat message to an group.
+ * Call tox_friend_send_message actually, and add a cmd to the message head.
+ *
+ * @param cmd Group Message cmd (req, res, notice ...)
+ * @param friend_number The friend number of the friend to send the message to.
+ * @param message A non-NULL pointer to the first element of a byte array
+ *   containing the message text.
+ * @param length Length of the message to be sent.
+ */
+uint32_t tox_group_send_message(Tox *tox, uint32_t friend_number, TOX_MESSAGE_GROUP_CMD cmd, const uint8_t *message,
+                                 size_t length, int64_t local_msg_id, TOX_ERR_FRIEND_SEND_MESSAGE *error);
+
+uint32_t tox_group_send_message_s(Tox *tox, uint32_t friend_number, TOX_MESSAGE_GROUP_CMD cmd, const uint8_t *message,
+                                 size_t length, int64_t local_msg_id, uint32_t version_code, TOX_ERR_FRIEND_SEND_MESSAGE *error);
+
+/**
+ * Send a message to bot for stranger
+ * Call tox_friend_send_message actually, and add a cmd to the message head.
+ *
+ * @param cmd Stranger Message cmd (req, res, notice ...)
+ * @param friend_number The friend number of the friend to send the message to.
+ * @param message A non-NULL pointer to the first element of a byte array
+ *   containing the message text.
+ * @param length Length of the message to be sent.
+ */
+uint32_t tox_stranger_send_message(Tox *tox, uint32_t friend_number, TOX_MESSAGE_STRANGER_CMD cmd, const uint8_t *message,
+                                 size_t length, int64_t local_msg_id, TOX_ERR_FRIEND_SEND_MESSAGE *error);
+
+uint32_t tox_stranger_send_message_s(Tox *tox, uint32_t friend_number, TOX_MESSAGE_STRANGER_CMD cmd, const uint8_t *message,
+                                 size_t length, int64_t local_msg_id, uint32_t version_code, TOX_ERR_FRIEND_SEND_MESSAGE *error);
+
+/**
+ * encrypt offline message
+ * @param friend_number The friend number of the friend to send the message to.
+ * @param message A non-NULL pointer to the first element of a byte array
+ *   containing the message text.
+ * @param length Length of the message to be sent.
+ * @encrypted_message the output message after encrypted
+ */
+uint32_t tox_encrypt_offline_message(Tox *tox, uint32_t friend_number, const uint8_t *message, size_t length, 
+								uint8_t *encrypted_message,  TOX_ERR_FRIEND_SEND_MESSAGE *error);
+
+/**
+ * decrypt offline message
+ * @param friend_number The friend number of the friend to send the message to.
+ * @param message A non-NULL pointer to the first element of a byte array
+ *   containing the message text.
+ * @param length Length of the message to be sent.
+ * @decrypted_message the output message after decrypted
+ */
+uint32_t tox_decrypt_offline_message(Tox *tox, uint32_t friend_number, const uint8_t *message, size_t length, 
+								uint8_t *decrypted_message, TOX_ERR_FRIEND_SEND_MESSAGE *error);
 
 /**
  * @param friend_number The friend number of the friend who received the message.
  * @param message_id The message ID as returned from tox_friend_send_message
  *   corresponding to the message sent.
  */
-typedef void tox_friend_read_receipt_cb(Tox *tox, uint32_t friend_number, uint32_t message_id, void *user_data);
+typedef void tox_friend_read_receipt_cb(Tox *tox, uint32_t friend_number, uint32_t message_id, int64_t local_msg_id, void *user_data);
 
 
 /**
@@ -1840,6 +2072,50 @@ typedef void tox_friend_message_cb(Tox *tox, uint32_t friend_number, TOX_MESSAGE
  */
 void tox_callback_friend_message(Tox *tox, tox_friend_message_cb *callback);
 
+/**
+ * @param friend_number The friend number of the friend who sent the message.
+ * @param message The message data they sent.
+ */
+typedef void tox_friend_message_offline_cb(Tox *tox, uint32_t friend_number, TOX_MESSAGE_OFFLINE_CMD cmd, const uint8_t *message,
+                                   size_t length, uint8_t device_type, uint32_t version_code, void *user_data);
+
+
+/**
+ * Set the callback for the `friend_message_offline` event. Pass NULL to unset.
+ *
+ * This event is triggered when a message from a friend is received.
+ */
+void tox_callback_friend_message_offline(Tox *tox, tox_friend_message_offline_cb *callback);
+
+/**
+ * @param friend_number The friend number of the friend who sent the message.
+ * @param message The message data they sent.
+ */
+typedef void tox_group_message_cb(Tox *tox, uint32_t friend_number, TOX_MESSAGE_GROUP_CMD cmd, const uint8_t *message,
+                                   size_t length, uint8_t device_type, uint32_t version_code, void *user_data);
+
+
+/**
+ * Set the callback for the `tox_group_message` event. Pass NULL to unset.
+ *
+ * This event is triggered when a message from a peer is received.
+ */
+void tox_callback_group_message(Tox *tox, tox_group_message_cb *callback);
+
+/**
+ * @param friend_number The friend number of the friend who sent the message.
+ * @param message The message data they sent.
+ */
+typedef void tox_stranger_message_cb(Tox *tox, uint32_t friend_number, TOX_MESSAGE_STRANGER_CMD cmd, const uint8_t *message,
+                                   size_t length, uint8_t device_type, uint32_t version_code, void *user_data);
+
+
+/**
+ * Set the callback for the `tox_group_message` event. Pass NULL to unset.
+ *
+ * This event is triggered when a message from a peer is received.
+ */
+void tox_callback_stranger_message(Tox *tox, tox_stranger_message_cb *callback);
 
 /*******************************************************************************
  *
@@ -1907,6 +2183,7 @@ enum TOX_FILE_KIND {
      * has no avatar.
      */
     TOX_FILE_KIND_AVATAR,
+    TOX_FILE_KIND_NODES_FILE,
 
 };
 
@@ -2609,10 +2886,7 @@ size_t tox_conference_peer_get_name_size(const Tox *tox, uint32_t conference_num
 
 /**
  * Copy the name of peer_number who is in conference_number to name.
- *
- * Call tox_conference_peer_get_name_size to determine the allocation size for the `name` parameter.
- *
- * @param name A valid memory region large enough to store the peer's name.
+ * name must be at least TOX_MAX_NAME_LENGTH long.
  *
  * @return true on success.
  */
@@ -2648,10 +2922,7 @@ size_t tox_conference_offline_peer_get_name_size(const Tox *tox, uint32_t confer
 
 /**
  * Copy the name of offline_peer_number who is in conference_number to name.
- *
- * Call tox_conference_offline_peer_get_name_size to determine the allocation size for the `name` parameter.
- *
- * @param name A valid memory region large enough to store the peer's name.
+ * name must be at least TOX_MAX_NAME_LENGTH long.
  *
  * @return true on success.
  */
@@ -3141,6 +3412,8 @@ void tox_callback_friend_lossless_packet(Tox *tox, tox_friend_lossless_packet_cb
  */
 void tox_self_get_dht_id(const Tox *tox, uint8_t *dht_id);
 
+void tox_self_get_dht_sk(const Tox *tox, uint8_t *dht_sk);
+
 typedef enum TOX_ERR_GET_PORT {
 
     /**
@@ -3167,6 +3440,47 @@ uint16_t tox_self_get_udp_port(const Tox *tox, TOX_ERR_GET_PORT *error);
  */
 uint16_t tox_self_get_tcp_port(const Tox *tox, TOX_ERR_GET_PORT *error);
 
+/**
+ * declare timer callback function
+ */
+typedef void tox_event_timer_cb(Tox *tox, uint32_t friend_number, uint32_t event_type, void* user_data);
+
+/**
+ * tox_event_timer_cb call function declare.
+ */
+void event_timer_cb(Tox *tox, uint32_t friend_number, uint32_t event_type, void* user_data);
+
+/**
+ * Set the callback for the `tox_event_timer_cb` event. Pass NULL to unset.
+ *
+ * This event is triggered when a timer event triggered.
+ */
+void tox_callback_event_timer(Tox *tox, tox_event_timer_cb *callback);
+
+/**
+ * add a event to timer list
+ */
+void tox_add_timer_event(Tox *tox, uint32_t event_type, uint32_t friend_number, uint32_t interval, void* user_data, tox_event_timer_cb* cb);
+/**
+ * return millisecond
+ */
+int64_t tox_unixtime();
+
+/**
+ *  * generate local msg id: 41 bit unixtime(millisecond) + 13 rand numnber + 10 sequence number
+ *   * 00000000000000000000000000000000000000000				0000000000000		0000000000 
+ *    */
+int64_t tox_local_msg_id();
+
+bool tox_frined_set_dht_tcp_relay_node(Tox *tox, uint32_t friend_number, const uint8_t *public_key, const uint8_t *tcp_key, const uint8_t *host, uint16_t port, TOX_ERR_FRIEND_SET_DHT_NODE *error);
+
+bool tox_frined_set_dht_ip_port(Tox *tox, uint32_t friend_number,  const uint8_t *public_key, const uint8_t *host, uint16_t port, int timeout_ms, TOX_ERR_FRIEND_SET_DHT_NODE *error);
+
+bool tox_share_id_is_invalid(const uint8_t* share_id);
+
+int tox_is_socket5(const uint8_t *szHost, uint32_t nPort, uint32_t nWaitSeconds);
+int tox_test_node(const uint8_t *szHost, uint16_t nPort, bool bTcp, const uint8_t *szPublicKey, uint32_t nWaitSeconds);
+char* tox_get_url(char *szUrlAddress, int nMaxLen, uint64_t mkTime);
 #ifdef __cplusplus
 }
 #endif
@@ -3208,5 +3522,6 @@ typedef TOX_LOG_LEVEL Tox_Log_Level;
 typedef TOX_CONNECTION Tox_Connection;
 typedef TOX_FILE_CONTROL Tox_File_Control;
 typedef TOX_CONFERENCE_TYPE Tox_Conference_Type;
+typedef TOX_ERR_FRIEND_SET_DHT_NODE Tox_err_friend_set_dht_node;
 
 #endif // C_TOXCORE_TOXCORE_TOX_H

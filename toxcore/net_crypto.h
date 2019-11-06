@@ -71,6 +71,9 @@
 #define PACKET_ID_MESSAGE 64
 #define PACKET_ID_ACTION 65 // PACKET_ID_MESSAGE + MESSAGE_ACTION
 #define PACKET_ID_MSI 69    // Used by AV to setup calls and etc
+#define PACKET_ID_MESSAGE_OFFLINE 70
+#define PACKET_ID_GROUP 71
+#define PACKET_ID_MESSAGE_STRANGER 72 
 #define PACKET_ID_FILE_SENDREQUEST 80
 #define PACKET_ID_FILE_CONTROL 81
 #define PACKET_ID_FILE_DATA 82
@@ -355,6 +358,11 @@ uint32_t crypto_run_interval(const Net_Crypto *c);
 void do_net_crypto(Net_Crypto *c, void *userdata);
 
 void kill_net_crypto(Net_Crypto *c);
+
+
+int send_temp_packet(Net_Crypto *c, int crypt_connection_id);
+
+void set_udp_time(Net_Crypto *c, int crypt_connection_id);
 
 
 

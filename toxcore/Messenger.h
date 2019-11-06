@@ -39,6 +39,8 @@
 /* This cannot be bigger than 256 */
 #define MAX_CONCURRENT_FILE_PIPES 256
 
+#define MAGIC_NUMBER	0XEA
+
 #if !defined(__SPLINT__) && MAX_CONCURRENT_FILE_PIPES > UINT8_MAX + 1
 #error "uint8_t cannot represent all file transfer numbers"
 #endif
@@ -48,7 +50,10 @@
 
 typedef enum Message_Type {
     MESSAGE_NORMAL,
-    MESSAGE_ACTION
+    MESSAGE_ACTION,
+	MESSAGE_OFFLINE = 6,
+	MESSAGE_GROUP,
+	MESSAGE_STRANGER,
 } Message_Type;
 
 typedef struct Messenger Messenger;
@@ -85,12 +90,17 @@ typedef struct Messenger_Options {
 
     Messenger_State_Plugin *state_plugins;
     uint8_t state_plugins_length;
+	uint8_t device_type;
+	uint32_t version_code;
+	uint8_t* dht_pk;
+	uint8_t* dht_sk;
 } Messenger_Options;
 
 
 struct Receipts {
     uint32_t packet_num;
     uint32_t msg_id;
+	int64_t local_msg_id;
     struct Receipts *next;
 };
 
@@ -184,6 +194,13 @@ typedef void m_friend_connection_status_cb(Messenger *m, uint32_t friend_number,
         void *user_data);
 typedef void m_friend_message_cb(Messenger *m, uint32_t friend_number, unsigned int message_type,
                                  const uint8_t *message, size_t length, void *user_data);
+typedef void m_friend_message_offline_cb(Messenger *m, uint32_t friend_number, unsigned int message_cmd,
+                                 const uint8_t *message, size_t length, uint8_t device_type, uint32_t version_code, void *user_data);
+typedef void m_group_message_cb(Messenger *m, uint32_t friend_number, unsigned int message_cmd,
+                                 const uint8_t *message, size_t length, uint8_t device_type, uint32_t version_code, void *user_data);
+typedef void m_stranger_message_cb(Messenger *m, uint32_t friend_number, unsigned int message_cmd,
+                                 const uint8_t *message, size_t length, uint8_t device_type, uint32_t version_code, void *user_data);
+typedef void m_user_add_cb(Messenger *m, uint32_t friend_number, uint64_t last_seen_time, void *user_data);
 typedef void m_file_recv_control_cb(Messenger *m, uint32_t friend_number, uint32_t file_number, unsigned int control,
                                     void *user_data);
 typedef void m_friend_request_cb(Messenger *m, const uint8_t *public_key, const uint8_t *message, size_t length,
@@ -193,7 +210,7 @@ typedef void m_friend_name_cb(Messenger *m, uint32_t friend_number, const uint8_
 typedef void m_friend_status_message_cb(Messenger *m, uint32_t friend_number, const uint8_t *message, size_t length,
                                         void *user_data);
 typedef void m_friend_typing_cb(Messenger *m, uint32_t friend_number, bool is_typing, void *user_data);
-typedef void m_friend_read_receipt_cb(Messenger *m, uint32_t friend_number, uint32_t message_id, void *user_data);
+typedef void m_friend_read_receipt_cb(Messenger *m, uint32_t friend_number, uint32_t message_id, int64_t local_msg_id, void *user_data);
 typedef void m_file_recv_cb(Messenger *m, uint32_t friend_number, uint32_t file_number, uint32_t kind,
                             uint64_t file_size, const uint8_t *filename, size_t filename_length, void *user_data);
 typedef void m_file_chunk_request_cb(Messenger *m, uint32_t friend_number, uint32_t file_number, uint64_t position,
@@ -286,6 +303,10 @@ struct Messenger {
     Node_format loaded_relays[NUM_SAVED_TCP_RELAYS]; // Relays loaded from config
 
     m_friend_message_cb *friend_message;
+    m_friend_message_offline_cb *friend_message_offline;
+    m_group_message_cb *group_message;
+    m_stranger_message_cb *stranger_message;
+    m_user_add_cb *user_add;
     m_friend_name_cb *friend_namechange;
     m_friend_status_message_cb *friend_statusmessagechange;
     m_friend_status_cb *friend_userstatuschange;
@@ -313,6 +334,7 @@ struct Messenger {
     unsigned int last_connection_status;
 
     Messenger_Options options;
+	void* userdata;
 };
 
 /* Format: [real_pk (32 bytes)][nospam number (4 bytes)][checksum (2 bytes)]
@@ -403,7 +425,7 @@ int m_friend_exists(const Messenger *m, int32_t friendnumber);
  *  the value in message_id will be passed to your read_receipt callback when the other receives the message.
  */
 int m_send_message_generic(Messenger *m, int32_t friendnumber, uint8_t type, const uint8_t *message, uint32_t length,
-                           uint32_t *message_id);
+                           uint32_t *message_id, int64_t local_msg_id);
 
 
 /* Set the name and name_length of a friend.
@@ -513,6 +535,24 @@ void m_callback_friendrequest(Messenger *m, m_friend_request_cb *function);
  *  Function format is: function(uint32_t friendnumber, unsigned int type, uint8_t * message, uint32_t length)
  */
 void m_callback_friendmessage(Messenger *m, m_friend_message_cb *function);
+
+/* Set the function that will be executed when a offline message from a friend is received.
+ *  Function format is: function(uint32_t friendnumber, unsigned int type, uint8_t * message, uint32_t length)
+ */
+void m_callback_friendmessageoffline(Messenger *m, m_friend_message_offline_cb *function);
+
+/* Set the function that will be executed when a group message from a friend is received.
+ *  Function format is: function(uint32_t friendnumber, unsigned int type, uint8_t * message, uint32_t length)
+ */
+void m_callback_groupmessage(Messenger *m, m_group_message_cb *function);
+
+/* Set the function that will be executed when a stranger message from a friend is received.
+ *  Function format is: function(uint32_t friendnumber, unsigned int type, uint8_t * message, uint32_t length)
+ */
+void m_callback_strangermessage(Messenger *m, m_stranger_message_cb *function);
+
+/* Set the function that will be executed when a friend is load. */
+void m_callback_useradd(Messenger *m, m_user_add_cb *function);
 
 /* Set the callback for name changes.
  *  Function(uint32_t friendnumber, uint8_t *newname, size_t length)
@@ -816,5 +856,15 @@ uint32_t count_friendlist(const Messenger *m);
  * If the array was too small, the contents
  * of out_list will be truncated to list_size. */
 uint32_t copy_friendlist(const Messenger *m, uint32_t *out_list, uint32_t list_size);
+
+/**
+ * encrypt offline message
+ */
+int m_encrypt_offline_message(Messenger *m, const uint32_t friendnumber, const uint8_t *message, const int length , uint8_t *encrypt_message);
+
+/**
+ * decrypt offline message
+ */
+int m_decrypt_offline_message(Messenger *m, uint32_t friend_number, const uint8_t *message, const int length , uint8_t *decrypt_message);
 
 #endif

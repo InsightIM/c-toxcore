@@ -608,6 +608,20 @@ static int add_ip_port_connection(Net_Crypto *c, int crypt_connection_id, IP_Por
     return -1;
 }
 
+void set_udp_time(Net_Crypto *c, int crypt_connection_id)
+{
+
+    Crypto_Connection *conn = get_crypto_connection(c, crypt_connection_id);
+
+    if (conn == nullptr) {
+        return ;
+    }
+
+    const uint64_t current_time = mono_time_get(c->mono_time);
+    conn->direct_lastrecv_timev4 = current_time;
+
+}
+
 /* Return the IP_Port that should be used to send packets to the other peer.
  *
  * return IP_Port with family 0 on failure.
@@ -1394,7 +1408,7 @@ static int clear_temp_packet(const Net_Crypto *c, int crypt_connection_id)
  * return -1 on failure.
  * return 0 on success.
  */
-static int send_temp_packet(Net_Crypto *c, int crypt_connection_id)
+int send_temp_packet(Net_Crypto *c, int crypt_connection_id)
 {
     Crypto_Connection *conn = get_crypto_connection(c, crypt_connection_id);
 

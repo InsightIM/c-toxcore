@@ -333,7 +333,7 @@ static int clear_receipts(Messenger *m, int32_t friendnumber)
     return 0;
 }
 
-static int add_receipt(Messenger *m, int32_t friendnumber, uint32_t packet_num, uint32_t msg_id)
+static int add_receipt(Messenger *m, int32_t friendnumber, uint32_t packet_num, uint32_t msg_id, int64_t local_msg_id)
 {
     if (friend_not_valid(m, friendnumber)) {
         return -1;
@@ -347,6 +347,7 @@ static int add_receipt(Messenger *m, int32_t friendnumber, uint32_t packet_num, 
 
     new_receipts->packet_num = packet_num;
     new_receipts->msg_id = msg_id;
+    new_receipts->local_msg_id = local_msg_id;
 
     if (!m->friendlist[friendnumber].receipts_start) {
         m->friendlist[friendnumber].receipts_start = new_receipts;
@@ -386,7 +387,7 @@ static int do_receipts(Messenger *m, int32_t friendnumber, void *userdata)
         }
 
         if (m->read_receipt) {
-            m->read_receipt(m, friendnumber, receipts->msg_id, userdata);
+            m->read_receipt(m, friendnumber, receipts->msg_id, receipts->local_msg_id, userdata);
         }
 
         struct Receipts *r_next = receipts->next;
@@ -493,9 +494,9 @@ int m_friend_exists(const Messenger *m, int32_t friendnumber)
  * return 0 if success.
  */
 int m_send_message_generic(Messenger *m, int32_t friendnumber, uint8_t type, const uint8_t *message, uint32_t length,
-                           uint32_t *message_id)
+                           uint32_t *message_id, int64_t local_msg_id)
 {
-    if (type > MESSAGE_ACTION) {
+    if (type > MESSAGE_STRANGER) {
         LOGGER_ERROR(m->log, "Message type %d is invalid", type);
         return -5;
     }
@@ -533,7 +534,7 @@ int m_send_message_generic(Messenger *m, int32_t friendnumber, uint8_t type, con
 
     uint32_t msg_id = ++m->friendlist[friendnumber].message_id;
 
-    add_receipt(m, friendnumber, packet_num, msg_id);
+    add_receipt(m, friendnumber, packet_num, msg_id, local_msg_id);
 
     if (message_id) {
         *message_id = msg_id;
@@ -853,6 +854,30 @@ void m_callback_friendrequest(Messenger *m, m_friend_request_cb *function)
 void m_callback_friendmessage(Messenger *m, m_friend_message_cb *function)
 {
     m->friend_message = function;
+}
+
+/* Set the function that will be executed when a offline message from a friend is received. */
+void m_callback_friendmessageoffline(Messenger *m, m_friend_message_offline_cb *function)
+{
+    m->friend_message_offline = function;
+}
+
+/* Set the function that will be executed when a offline message from a friend is received. */
+void m_callback_groupmessage(Messenger *m, m_group_message_cb *function)
+{
+    m->group_message = function;
+}
+
+/* Set the function that will be executed when a offline message from a friend is received. */
+void m_callback_strangermessage(Messenger *m, m_stranger_message_cb *function)
+{
+    m->stranger_message = function;
+}
+
+/* Set the function that will be executed when a friend is load. */
+void m_callback_useradd(Messenger *m, m_user_add_cb *function)
+{
+    m->user_add = function;
 }
 
 void m_callback_namechange(Messenger *m, m_friend_name_cb *function)
@@ -2013,7 +2038,7 @@ Messenger *new_messenger(Mono_Time *mono_time, Messenger_Options *options, unsig
         return nullptr;
     }
 
-    m->dht = new_dht(m->log, m->mono_time, m->net, options->hole_punching_enabled);
+    m->dht = new_dht(m->log, m->mono_time, m->net, options->hole_punching_enabled, options->dht_pk, options->dht_sk);
 
     if (m->dht == nullptr) {
         kill_networking(m->net);
@@ -2285,6 +2310,60 @@ static int m_handle_packet(void *object, int i, const uint8_t *temp, uint16_t le
             break;
         }
 
+		case PACKET_ID_MESSAGE_OFFLINE: 
+		case PACKET_ID_MESSAGE_STRANGER: 
+		case PACKET_ID_GROUP: {
+			uint8_t magic_number = 0;
+			uint32_t magic_number_len = sizeof(uint8_t);
+            if (data_length == 0 || data_length < magic_number_len) {
+                break;
+            }
+			memcpy(&magic_number, data, magic_number_len);	
+			uint32_t head_len = 0;
+			uint8_t cmd = 0;
+			uint32_t extra = 0;
+			uint32_t version_code = 0;
+			uint8_t device_type = 0;
+			if (magic_number == MAGIC_NUMBER) {
+				head_len = sizeof(uint8_t) +  sizeof(uint8_t) +  sizeof(uint32_t);	
+			} else {
+				// Old version
+				head_len = sizeof(uint8_t);
+			}
+            if (data_length == 0 || data_length < head_len) {
+                break;
+            }
+			if (magic_number == MAGIC_NUMBER) {
+				memcpy(&cmd, data + sizeof(uint8_t), sizeof(uint8_t));
+				memcpy(&extra, data + sizeof(uint8_t)*2, sizeof(uint32_t));
+				version_code = extra & 0xfffff;
+				device_type = extra >> 20 & 0xf;
+			} else {
+				memcpy(&cmd, data, head_len);
+			}
+            const uint8_t *message = data + head_len;
+            uint16_t message_length = data_length - head_len;
+
+            /* Make sure the NULL terminator is present. */
+            VLA(uint8_t, message_terminated, message_length + 1);
+            memcpy(message_terminated, message, message_length);
+            message_terminated[message_length] = 0;
+			if (PACKET_ID_MESSAGE_OFFLINE == packet_id) {
+				if (m->friend_message_offline) {
+					(*m->friend_message_offline)(m, i, cmd, message_terminated, message_length, device_type, version_code, userdata);
+				}
+			} else if (PACKET_ID_GROUP == packet_id) {
+				if (m->group_message) {
+					(*m->group_message)(m, i, cmd, message_terminated, message_length, device_type, version_code, userdata);
+				}
+			} else if (PACKET_ID_MESSAGE_STRANGER == packet_id) {
+				if (m->stranger_message) {
+					(*m->stranger_message)(m, i, cmd, message_terminated, message_length, device_type, version_code, userdata);
+				}
+			}
+			break; 
+		}
+
         case PACKET_ID_INVITE_CONFERENCE: {
             if (data_length == 0) {
                 break;
@@ -2477,7 +2556,12 @@ static void do_friends(Messenger *m, void *userdata)
     uint32_t i;
     uint64_t temp_time = mono_time_get(m->mono_time);
 
+	uint32_t total_unuse = 0;
     for (i = 0; i < m->numfriends; ++i) {
+		uint32_t unuse_days = (temp_time - m->friendlist[i].last_seen_time) / 60 / 60 / 24;
+		if (unuse_days > 30) {
+			LOGGER_DEBUG(m->log, "numfriends: %d unuse_days: %d total_unuse: %d i:%d", m->numfriends, unuse_days, total_unuse++, i);
+		}
         if (m->friendlist[i].status == FRIEND_ADDED) {
             int fr = send_friend_request_packet(m->fr_c, m->friendlist[i].friendcon_id, m->friendlist[i].friendrequest_nospam,
                                                 m->friendlist[i].info,
@@ -3081,6 +3165,9 @@ static State_Load_Status friends_list_load(Messenger *m, const uint8_t *data, ui
             memcpy(last_seen_time, &temp.last_seen_time, sizeof(uint64_t));
             net_to_host(last_seen_time, sizeof(uint64_t));
             memcpy(&m->friendlist[fnum].last_seen_time, last_seen_time, sizeof(uint64_t));
+			if (m->user_add) {
+				(*m->user_add)(m, fnum, temp.last_seen_time, m->userdata);
+			}
         } else if (temp.status != 0) {
             /* TODO(irungentoo): This is not a good way to do this. */
             uint8_t address[FRIEND_ADDRESS_SIZE];
@@ -3321,3 +3408,47 @@ uint32_t copy_friendlist(Messenger const *m, uint32_t *out_list, uint32_t list_s
 
     return ret;
 }
+
+int m_encrypt_offline_message(Messenger *m, const uint32_t friendnumber, const uint8_t *message, const int length , uint8_t *encrypt_message) {
+	int total_length =   CRYPTO_PUBLIC_KEY_SIZE + CRYPTO_NONCE_SIZE + length + CRYPTO_MAC_SIZE;
+	VLA(uint8_t, packet, total_length);
+	// random a nonce
+	VLA(uint8_t, nonce, CRYPTO_NONCE_SIZE);
+	random_nonce(nonce);
+	uint8_t *pk = m->friendlist[friendnumber].real_pk;
+	memcpy(packet, pk, CRYPTO_PUBLIC_KEY_SIZE);
+	memcpy(packet + CRYPTO_PUBLIC_KEY_SIZE, nonce, CRYPTO_NONCE_SIZE);
+	const uint8_t *secret_key = nc_get_self_secret_key(m->net_crypto);
+
+	VLA(uint8_t, e_m, length + CRYPTO_MAC_SIZE);
+	int32_t len = encrypt_data(pk, secret_key, nonce, message, length, e_m);
+	memcpy(packet + CRYPTO_PUBLIC_KEY_SIZE + CRYPTO_NONCE_SIZE, e_m, length + CRYPTO_MAC_SIZE);
+	memcpy(encrypt_message, packet, total_length);
+
+	return total_length;
+}
+
+int m_decrypt_offline_message(Messenger *m, uint32_t friendnumber, const uint8_t *message, const int length , uint8_t *decrypt_message) {
+	if (friendnumber == -1) {
+		return 0;
+	}
+	if (length - CRYPTO_PUBLIC_KEY_SIZE - CRYPTO_NONCE_SIZE <= 0) {
+		return 0;
+	}
+	uint8_t *friendpk = m->friendlist[friendnumber].real_pk;
+	VLA(uint8_t, nonce, CRYPTO_NONCE_SIZE);
+	memcpy(nonce, message + CRYPTO_PUBLIC_KEY_SIZE, CRYPTO_NONCE_SIZE);
+	
+	VLA(uint8_t, encrypted_message, length - CRYPTO_PUBLIC_KEY_SIZE - CRYPTO_NONCE_SIZE);
+	memcpy(encrypted_message, message + CRYPTO_PUBLIC_KEY_SIZE + CRYPTO_NONCE_SIZE, length - CRYPTO_PUBLIC_KEY_SIZE - CRYPTO_NONCE_SIZE);
+
+	uint8_t real_message[length - CRYPTO_PUBLIC_KEY_SIZE - CRYPTO_NONCE_SIZE - CRYPTO_MAC_SIZE];
+	
+	const uint8_t *secret_key = nc_get_self_secret_key(m->net_crypto);
+	int len = decrypt_data(friendpk, secret_key, nonce, encrypted_message, length - CRYPTO_PUBLIC_KEY_SIZE - CRYPTO_NONCE_SIZE, real_message);
+	if (-1 != len) {
+		memcpy(decrypt_message, real_message, len);
+	}
+	return len;
+}
+

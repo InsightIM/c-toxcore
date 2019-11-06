@@ -56,8 +56,13 @@ ACCESSORS(bool,, hole_punching_enabled)
 ACCESSORS(Tox_Savedata_Type, savedata_, type)
 ACCESSORS(size_t, savedata_, length)
 ACCESSORS(tox_log_cb *, log_, callback)
+ACCESSORS(tox_user_add_cb *, user_add_, callback)
 ACCESSORS(void *, log_, user_data)
 ACCESSORS(bool,, local_discovery_enabled)
+ACCESSORS(uint8_t,, device_type)
+ACCESSORS(uint32_t,, version_code)
+ACCESSORS(uint8_t *,, dht_pk)
+ACCESSORS(uint8_t *,, dht_sk)
 
 const uint8_t *tox_options_get_savedata_data(const struct Tox_Options *options)
 {

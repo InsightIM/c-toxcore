@@ -2704,7 +2704,7 @@ static int cryptopacket_handle(void *object, IP_Port source, const uint8_t *pack
 
 /*----------------------------------------------------------------------------------*/
 
-DHT *new_dht(const Logger *log, Mono_Time *mono_time, Networking_Core *net, bool holepunching_enabled)
+DHT *new_dht(const Logger *log, Mono_Time *mono_time, Networking_Core *net, bool holepunching_enabled, const uint8_t* dht_pk, const uint8_t* dht_sk)
 {
     if (net == nullptr) {
         return nullptr;
@@ -2735,7 +2735,12 @@ DHT *new_dht(const Logger *log, Mono_Time *mono_time, Networking_Core *net, bool
     cryptopacket_registerhandler(dht, CRYPTO_PACKET_NAT_PING, &handle_NATping, dht);
     cryptopacket_registerhandler(dht, CRYPTO_PACKET_HARDENING, &handle_hardening, dht);
 
-    crypto_new_keypair(dht->self_public_key, dht->self_secret_key);
+	if (!dht_pk && !dht_sk) {
+		crypto_new_keypair(dht->self_public_key, dht->self_secret_key);
+	} else {
+		memcpy(dht->self_public_key, dht_pk, CRYPTO_PUBLIC_KEY_SIZE);	
+		memcpy(dht->self_secret_key, dht_sk, CRYPTO_PUBLIC_KEY_SIZE);	
+	}
 
     dht->dht_ping_array = ping_array_new(DHT_PING_ARRAY_SIZE, PING_TIMEOUT);
     dht->dht_harden_ping_array = ping_array_new(DHT_PING_ARRAY_SIZE, PING_TIMEOUT);
@@ -2744,7 +2749,7 @@ DHT *new_dht(const Logger *log, Mono_Time *mono_time, Networking_Core *net, bool
         uint8_t random_public_key_bytes[CRYPTO_PUBLIC_KEY_SIZE];
         uint8_t random_secret_key_bytes[CRYPTO_SECRET_KEY_SIZE];
 
-        crypto_new_keypair(random_public_key_bytes, random_secret_key_bytes);
+		crypto_new_keypair(random_public_key_bytes, random_secret_key_bytes);
 
         if (dht_addfriend(dht, random_public_key_bytes, nullptr, nullptr, 0, nullptr) != 0) {
             kill_dht(dht);

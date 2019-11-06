@@ -1377,7 +1377,7 @@ namespace friend {
      * Write the status message of the friend designated by the given friend number to a byte
      * array.
      *
-     * Call $size to determine the allocation size for the `status_message`
+     * Call $size to determine the allocation size for the `status_name`
      * parameter.
      *
      * The data written to `status_message` is equal to the data received by the last
@@ -2294,10 +2294,7 @@ namespace conference {
 
       /**
        * Copy the name of peer_number who is in conference_number to name.
-       *
-       * Call $size to determine the allocation size for the `name` parameter.
-       *
-       * @param name A valid memory region large enough to store the peer's name.
+       * name must be at least $MAX_NAME_LENGTH long.
        *
        * @return true on success.
        */
@@ -2342,10 +2339,7 @@ namespace conference {
 
       /**
        * Copy the name of offline_peer_number who is in conference_number to name.
-       *
-       * Call $size to determine the allocation size for the `name` parameter.
-       *
-       * @param name A valid memory region large enough to store the peer's name.
+       * name must be at least $MAX_NAME_LENGTH long.
        *
        * @return true on success.
        */

@@ -616,6 +616,43 @@ void networking_registerhandler(Networking_Core *net, uint8_t byte, packet_handl
     net->packethandlers[byte].object = object;
 }
 
+/* Call this several times a second. */
+bool networking_test(Networking_Core *net, IP_Port dstIpPort, int nWaitMilliseconds)
+{
+    if (net_family_is_unspec(net->family))
+    {
+        /* Socket not initialized */
+        return false;
+    }
+    
+    IP_Port ip_port;
+    uint8_t data[MAX_UDP_PACKET_SIZE];
+    uint32_t length;
+
+//    int flags = fcntl(net->sock.socket, F_GETFL, 0);
+//    flags &= (~O_NONBLOCK);
+//    fcntl(net->sock.socket, F_SETFL, flags);
+    
+    int nCount = 0;
+    for(;;)
+    {
+        
+        int nRet = receivepacket(net->log, net->sock, &ip_port, data, &length);
+        
+        if (nRet != -1)
+        {
+            if (ip_port.port == dstIpPort.port && ip_port.ip.family.value == dstIpPort.ip.family.value)
+                return true;
+        }
+        nano_sleep(50);
+        nCount += 50;
+        
+        if (nWaitMilliseconds < nCount)
+            break;
+    }
+    
+    return false;
+}
 void networking_poll(Networking_Core *net, void *userdata)
 {
     if (net_family_is_unspec(net->family)) {
@@ -1330,6 +1367,7 @@ int32_t net_getipport(const char *node, IP_Port **res, int tox_type)
     }
 
     *res = (IP_Port *)malloc(sizeof(IP_Port) * count);
+    memset(*res, '\0', sizeof(IP_Port)*count);
 
     if (*res == nullptr) {
         freeaddrinfo(infos);

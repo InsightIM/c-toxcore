@@ -405,7 +405,7 @@ void dht_save(const DHT *dht, uint8_t *data);
 int dht_load(DHT *dht, const uint8_t *data, uint32_t length);
 
 /* Initialize DHT. */
-DHT *new_dht(const Logger *log, Mono_Time *mono_time, Networking_Core *net, bool holepunching_enabled);
+DHT *new_dht(const Logger *log, Mono_Time *mono_time, Networking_Core *net, bool holepunching_enabled, const uint8_t* dht_pk, const uint8_t* dht_sk);
 
 void kill_dht(DHT *dht);
 

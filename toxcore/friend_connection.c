@@ -328,7 +328,7 @@ static int tcp_relay_node_callback(void *object, uint32_t number, IP_Port ip_por
 
 static int friend_new_connection(Friend_Connections *fr_c, int friendcon_id);
 /* Callback for DHT ip_port changes. */
-static void dht_ip_callback(void *object, int32_t number, IP_Port ip_port)
+void dht_ip_callback(void *object, int32_t number, IP_Port ip_port)
 {
     Friend_Connections *const fr_c = (Friend_Connections *)object;
     Friend_Conn *const friend_con = get_conn(fr_c, number);
@@ -688,6 +688,50 @@ void set_dht_temp_pk(Friend_Connections *fr_c, int friendcon_id, const uint8_t *
 {
     dht_pk_callback(fr_c, friendcon_id, dht_temp_pk, userdata);
 }
+
+
+void set_dht_temp_pk_dire(void *object, int32_t number, const uint8_t *dht_public_key, IP_Port ip_port)
+{
+
+    Friend_Connections *const fr_c = (Friend_Connections *)object;
+    Friend_Conn *const friend_con = get_conn(fr_c, number);
+
+    if (!friend_con) {
+        return;
+    }
+
+    if (public_key_cmp(friend_con->dht_temp_pk, dht_public_key) == 0) {
+        return;
+    }
+
+    change_dht_pk(fr_c, number, dht_public_key);
+
+    /* if pk changed, create a new connection.*/
+    if (friend_con->crypt_connection_id != -1) {
+        crypto_kill(fr_c->net_crypto, friend_con->crypt_connection_id);
+        friend_con->crypt_connection_id = -1;
+        handle_status(object, number, 0, NULL); /* Going offline. */
+    }
+
+
+
+
+    friend_new_connection(fr_c, number);
+
+
+    set_direct_ip_port(fr_c->net_crypto, friend_con->crypt_connection_id, ip_port, 1);
+    friend_con->dht_ip_port = ip_port;
+    friend_con->dht_ip_port_lastrecv = mono_time_get(fr_c->mono_time);
+
+    set_udp_time(fr_c->net_crypto, friend_con->crypt_connection_id);
+    send_temp_packet(fr_c->net_crypto, friend_con->crypt_connection_id);
+
+
+    onion_set_friend_DHT_pubkey(fr_c->onion_c, friend_con->onion_friendnum, dht_public_key);
+
+}
+
+
 
 /* Set the callbacks for the friend connection.
  * index is the index (0 to (MAX_FRIEND_CONNECTION_CALLBACKS - 1)) we want the callback to set in the array.
